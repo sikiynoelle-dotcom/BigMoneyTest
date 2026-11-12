@@ -263,8 +263,8 @@
 
     const script = document.createElement('script');
     script.id = 'gviz-script';
-    // 指定讀取範圍 A1:ZZ100，確保所有欄位完整載入不被截斷
-    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:handleSheetResponse&gid=${GID}&range=A1:ZZ100&_=${Date.now()}`;
+    // 擴大讀取範圍到 A1:ZZ150，確保能涵蓋所有垂直區塊
+    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:handleSheetResponse&gid=${GID}&range=A1:ZZ150&_=${Date.now()}`;
     script.onerror = function() {
       container.innerHTML = `<div class="error">無法讀取試算表資料。請確認 Google 試算表已開啟「知道連結的任何人皆可檢視」權限。</div>`;
     };
@@ -281,77 +281,66 @@
 
     const table = response.table;
     const rows = table.rows;
+    boardsData = [];
 
-    let labelColIdx = -1;
-    let snRowIdx = -1;
-
+    // 1. 找出所有含有「寫SN」的列（支援多個垂直區塊，例如 row 3, 29, 55 等）
+    let snRows = [];
     for (let r = 0; r < rows.length; r++) {
       const cells = rows[r].c;
       if (!cells) continue;
       for (let c = 0; c < cells.length; c++) {
-        const val = getCellValue(cells[c]);
-        if (val === '寫SN') {
-          labelColIdx = c;
-          snRowIdx = r;
+        if (getCellValue(cells[c]) === '寫SN') {
+          snRows.push({ rowIdx: r, colIdx: c });
           break;
         }
       }
-      if (snRowIdx !== -1) break;
     }
 
-    let snRowCells = [];
-    if (snRowIdx === -1) {
-      for (let c = 0; c < table.cols.length; c++) {
-        if ((table.cols[c].label || '').trim() === '寫SN') {
-          labelColIdx = c;
-          snRowCells = table.cols.map(col => ({ v: col.label }));
-          snRowIdx = -2;
-          break;
-        }
-      }
-    } else {
-      snRowCells = rows[snRowIdx].c;
-    }
-
-    if (labelColIdx === -1) {
+    if (snRows.length === 0) {
       container.innerHTML = `<div class="error">在表單中找不到「寫SN」欄位，請確認試算表結構。</div>`;
       return;
     }
 
-    const rowMap = {};
-    const startDataRow = snRowIdx === -2 ? 0 : snRowIdx + 1;
-    for (let r = startDataRow; r < rows.length; r++) {
-      const cells = rows[r].c;
-      if (!cells || !cells[labelColIdx]) continue;
-      const key = getCellValue(cells[labelColIdx]);
-      if (key) {
-        rowMap[key] = r;
-      }
-    }
+    // 2. 逐一走訪每一個區塊
+    snRows.forEach(block => {
+      const snRowIdx = block.rowIdx;
+      const labelColIdx = block.colIdx;
+      const snRowCells = rows[snRowIdx].c;
 
-    boardsData = [];
-    const totalCols = Math.max(snRowCells.length, table.cols.length);
-
-    for (let c = labelColIdx + 1; c < totalCols; c++) {
-      const snValue = getCellValue(snRowCells[c]);
-      if (!snValue) continue;
-
-      const record = {
-        "寫SN": snValue
-      };
-
-      LEFT_FIELDS.forEach(field => {
-        if (field === "寫SN") return;
-        const targetRowIdx = rowMap[field];
-        if (targetRowIdx !== undefined && rows[targetRowIdx].c && rows[targetRowIdx].c[c]) {
-          record[field] = getCellValue(rows[targetRowIdx].c[c]);
-        } else {
-          record[field] = "";
+      // 建立該區塊的項目名稱對照表 (項目名稱 -> 該區塊內的行索引)
+      const rowMap = {};
+      // 往下最多檢查 25 行（涵蓋此區塊的各個測試項目）
+      for (let r = snRowIdx + 1; r < Math.min(snRowIdx + 30, rows.length); r++) {
+        const cells = rows[r].c;
+        if (!cells || !cells[labelColIdx]) continue;
+        const key = getCellValue(cells[labelColIdx]);
+        if (key) {
+          rowMap[key] = r;
         }
-      });
+      }
 
-      boardsData.push(record);
-    }
+      // 掃描該區塊右側的欄位（通常 C 到 L 或更多）
+      for (let c = labelColIdx + 1; c < snRowCells.length; c++) {
+        const snValue = getCellValue(snRowCells[c]);
+        if (!snValue) continue; // 若該格無 SN 則跳過
+
+        const record = {
+          "寫SN": snValue
+        };
+
+        LEFT_FIELDS.forEach(field => {
+          if (field === "寫SN") return;
+          const targetRowIdx = rowMap[field];
+          if (targetRowIdx !== undefined && rows[targetRowIdx].c && rows[targetRowIdx].c[c]) {
+            record[field] = getCellValue(rows[targetRowIdx].c[c]);
+          } else {
+            record[field] = "";
+          }
+        });
+
+        boardsData.push(record);
+      }
+    });
 
     populateDropdown();
     const now = new Date();
@@ -452,7 +441,7 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-  }
+    }
 
   window.addEventListener('DOMContentLoaded', fetchSheetData);
 </script>
