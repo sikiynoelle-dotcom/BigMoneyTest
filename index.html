@@ -222,11 +222,9 @@
 </div>
 
 <script>
-  // Google 試算表設定
   const SHEET_ID = '1m3R1_rAv4HCyX64Vf-K9DxvWVdhc4IM6EVe0kTxVXVg';
   const GID = '0';
 
-  // 左側固定參照欄位順序
   const LEFT_FIELDS = [
     "寫SN",
     "Check MAC",
@@ -253,29 +251,26 @@
     "Power"
   ];
 
-  // 儲存解析後的各片板子資料陣列
   let boardsData = [];
 
-  // 透過 JSONP 載入 Google Visualization API 資料，避免 GitHub Pages CORS 限制
   function fetchSheetData() {
     const select = document.getElementById('boardSelect');
     const container = document.getElementById('tableContainer');
     select.disabled = true;
 
-    // 移除舊的 JSONP script 標籤
     const oldScript = document.getElementById('gviz-script');
     if (oldScript) oldScript.remove();
 
     const script = document.createElement('script');
     script.id = 'gviz-script';
-    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:handleSheetResponse&gid=${GID}&_=${Date.now()}`;
+    // 指定讀取範圍 A1:ZZ100，確保所有欄位完整載入不被截斷
+    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:handleSheetResponse&gid=${GID}&range=A1:ZZ100&_=${Date.now()}`;
     script.onerror = function() {
       container.innerHTML = `<div class="error">無法讀取試算表資料。請確認 Google 試算表已開啟「知道連結的任何人皆可檢視」權限。</div>`;
     };
     document.body.appendChild(script);
   }
 
-  // Google Visualization API 回呼函式
   function handleSheetResponse(response) {
     const container = document.getElementById('tableContainer');
 
@@ -287,7 +282,6 @@
     const table = response.table;
     const rows = table.rows;
 
-    // 1. 尋找「寫SN」所在的列與欄索引
     let labelColIdx = -1;
     let snRowIdx = -1;
 
@@ -305,14 +299,13 @@
       if (snRowIdx !== -1) break;
     }
 
-    // 若表頭被 gviz 自動解析進 table.cols，則檢查 cols
     let snRowCells = [];
     if (snRowIdx === -1) {
       for (let c = 0; c < table.cols.length; c++) {
         if ((table.cols[c].label || '').trim() === '寫SN') {
           labelColIdx = c;
           snRowCells = table.cols.map(col => ({ v: col.label }));
-          snRowIdx = -2; // 標記資料在 cols 中
+          snRowIdx = -2;
           break;
         }
       }
@@ -325,7 +318,6 @@
       return;
     }
 
-    // 2. 建立列名稱對照表 (項目名稱 -> 所在列索引)
     const rowMap = {};
     const startDataRow = snRowIdx === -2 ? 0 : snRowIdx + 1;
     for (let r = startDataRow; r < rows.length; r++) {
@@ -337,13 +329,11 @@
       }
     }
 
-    // 3. 掃描「寫SN」右側有幾欄有效資料，建立每一片板子的物件
     boardsData = [];
-    const totalCols = snRowCells.length;
+    const totalCols = Math.max(snRowCells.length, table.cols.length);
 
     for (let c = labelColIdx + 1; c < totalCols; c++) {
       const snValue = getCellValue(snRowCells[c]);
-      // 遇到空白欄即停止（代表後面的欄位尚未填寫測試資料）
       if (!snValue) continue;
 
       const record = {
@@ -353,7 +343,7 @@
       LEFT_FIELDS.forEach(field => {
         if (field === "寫SN") return;
         const targetRowIdx = rowMap[field];
-        if (targetRowIdx !== undefined && rows[targetRowIdx].c[c]) {
+        if (targetRowIdx !== undefined && rows[targetRowIdx].c && rows[targetRowIdx].c[c]) {
           record[field] = getCellValue(rows[targetRowIdx].c[c]);
         } else {
           record[field] = "";
@@ -363,7 +353,6 @@
       boardsData.push(record);
     }
 
-    // 4. 更新下拉選單與畫面
     populateDropdown();
     const now = new Date();
     document.getElementById('lastUpdated').textContent = `更新時間：${now.toLocaleTimeString()}`;
@@ -393,7 +382,6 @@
     boardsData.forEach((board, idx) => {
       const option = document.createElement('option');
       option.value = idx;
-      // 顯示 1, 2, 3... 並附上該片板子的 SN 方便核對
       option.textContent = `${idx + 1} (${board["寫SN"]})`;
       select.appendChild(option);
     });
@@ -401,7 +389,6 @@
     totalCountEl.textContent = `總計片數：${boardsData.length} 片（1 ~ ${boardsData.length}）`;
     select.disabled = false;
 
-    // 保留原本選擇的編號（若重新整理後仍存在）
     if (previousIndex !== "" && Number(previousIndex) < boardsData.length) {
       select.value = previousIndex;
     } else {
@@ -467,7 +454,6 @@
       .replace(/'/g, "&#039;");
   }
 
-  // 頁面載入時自動執行
   window.addEventListener('DOMContentLoaded', fetchSheetData);
 </script>
 
