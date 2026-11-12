@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BigMoney MB 主板測試結果查詢</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --pass-bg: #dcfce7;
+      --pass-text: #166534;
+      --fail-bg: #fee2e2;
+      --fail-text: #991b1b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 24px 16px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .header {
+      padding: 20px 24px;
+      background-color: #ffffff;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    select {
+      padding: 8px 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background-color: #fff;
+      color: var(--text);
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .btn-refresh {
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--primary);
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-refresh:hover {
+      background: #dbeafe;
+    }
+
+    .status-bar {
+      padding: 10px 24px;
+      background: #f1f5f9;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px 24px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background-color: #f8fafc;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background-color: #f8fafc;
+    }
+
+    td.item-name {
+      width: 45%;
+      font-weight: 600;
+      color: #334155;
+    }
+
+    td.item-value {
+      width: 55%;
+      font-weight: 500;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.95rem;
+      background: #f1f5f9;
+      padding: 3px 8px;
+      border-radius: 4px;
+      color: #0f172a;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-pass {
+      background-color: var(--pass-bg);
+      color: var(--pass-text);
+    }
+
+    .badge-fail {
+      background-color: var(--fail-bg);
+      color: var(--fail-text);
+    }
+
+    .badge-empty {
+      background-color: #e2e8f0;
+      color: #475569;
+    }
+
+    .loading, .error {
+      padding: 40px 24px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .error {
+      color: var(--fail-text);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>主板測試結果查詢</h1>
+    <div class="controls">
+      <label for="boardSelect">選擇編號：</label>
+      <select id="boardSelect" disabled>
+        <option>載入中...</option>
+      </select>
+      <button class="btn-refresh" onclick="fetchSheetData()" title="重新讀取最新表單資料">重新整理</button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span id="totalCount">總計片數：計算中...</span>
+    <span id="lastUpdated"></span>
+  </div>
+
+  <div id="tableContainer">
+    <div class="loading">正在從 Google 試算表讀取測試資料...</div>
+  </div>
+</div>
+
+<script>
+  // Google 試算表設定
+  const SHEET_ID = '1m3R1_rAv4HCyX64Vf-K9DxvWVdhc4IM6EVe0kTxVXVg';
+  const GID = '0';
+
+  // 左側固定參照欄位順序
+  const LEFT_FIELDS = [
+    "寫SN",
+    "Check MAC",
+    "Check 主板序號",
+    "USB 24V",
+    "USB 12V [1]",
+    "USB 12V [2]",
+    "USB 12V [3]",
+    "USB 12V [4]",
+    "USB 12V [5]",
+    "USBC 顯示",
+    "內建喇叭",
+    "USB [1]",
+    "USB [2]",
+    "USB [3]",
+    "USB [4]",
+    "front USB [1]",
+    "front USB [2]",
+    "Cash Drawer",
+    "Ethernat",
+    "耳機",
+    "mic",
+    "HDMI",
+    "Power"
+  ];
+
+  // 儲存解析後的各片板子資料陣列
+  let boardsData = [];
+
+  // 透過 JSONP 載入 Google Visualization API 資料，避免 GitHub Pages CORS 限制
+  function fetchSheetData() {
+    const select = document.getElementById('boardSelect');
+    const container = document.getElementById('tableContainer');
+    select.disabled = true;
+
+    // 移除舊的 JSONP script 標籤
+    const oldScript = document.getElementById('gviz-script');
+    if (oldScript) oldScript.remove();
+
+    const script = document.createElement('script');
+    script.id = 'gviz-script';
+    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:handleSheetResponse&gid=${GID}&_=${Date.now()}`;
+    script.onerror = function() {
+      container.innerHTML = `<div class="error">無法讀取試算表資料。請確認 Google 試算表已開啟「知道連結的任何人皆可檢視」權限。</div>`;
+    };
+    document.body.appendChild(script);
+  }
+
+  // Google Visualization API 回呼函式
+  function handleSheetResponse(response) {
+    const container = document.getElementById('tableContainer');
+
+    if (response.status === 'error') {
+      container.innerHTML = `<div class="error">讀取試算表發生錯誤：${response.errors.map(e => e.message).join(', ')}</div>`;
+      return;
+    }
+
+    const table = response.table;
+    const rows = table.rows;
+
+    // 1. 尋找「寫SN」所在的列與欄索引
+    let labelColIdx = -1;
+    let snRowIdx = -1;
+
+    for (let r = 0; r < rows.length; r++) {
+      const cells = rows[r].c;
+      if (!cells) continue;
+      for (let c = 0; c < cells.length; c++) {
+        const val = getCellValue(cells[c]);
+        if (val === '寫SN') {
+          labelColIdx = c;
+          snRowIdx = r;
+          break;
+        }
+      }
+      if (snRowIdx !== -1) break;
+    }
+
+    // 若表頭被 gviz 自動解析進 table.cols，則檢查 cols
+    let snRowCells = [];
+    if (snRowIdx === -1) {
+      for (let c = 0; c < table.cols.length; c++) {
+        if ((table.cols[c].label || '').trim() === '寫SN') {
+          labelColIdx = c;
+          snRowCells = table.cols.map(col => ({ v: col.label }));
+          snRowIdx = -2; // 標記資料在 cols 中
+          break;
+        }
+      }
+    } else {
+      snRowCells = rows[snRowIdx].c;
+    }
+
+    if (labelColIdx === -1) {
+      container.innerHTML = `<div class="error">在表單中找不到「寫SN」欄位，請確認試算表結構。</div>`;
+      return;
+    }
+
+    // 2. 建立列名稱對照表 (項目名稱 -> 所在列索引)
+    const rowMap = {};
+    const startDataRow = snRowIdx === -2 ? 0 : snRowIdx + 1;
+    for (let r = startDataRow; r < rows.length; r++) {
+      const cells = rows[r].c;
+      if (!cells || !cells[labelColIdx]) continue;
+      const key = getCellValue(cells[labelColIdx]);
+      if (key) {
+        rowMap[key] = r;
+      }
+    }
+
+    // 3. 掃描「寫SN」右側有幾欄有效資料，建立每一片板子的物件
+    boardsData = [];
+    const totalCols = snRowCells.length;
+
+    for (let c = labelColIdx + 1; c < totalCols; c++) {
+      const snValue = getCellValue(snRowCells[c]);
+      // 遇到空白欄即停止（代表後面的欄位尚未填寫測試資料）
+      if (!snValue) continue;
+
+      const record = {
+        "寫SN": snValue
+      };
+
+      LEFT_FIELDS.forEach(field => {
+        if (field === "寫SN") return;
+        const targetRowIdx = rowMap[field];
+        if (targetRowIdx !== undefined && rows[targetRowIdx].c[c]) {
+          record[field] = getCellValue(rows[targetRowIdx].c[c]);
+        } else {
+          record[field] = "";
+        }
+      });
+
+      boardsData.push(record);
+    }
+
+    // 4. 更新下拉選單與畫面
+    populateDropdown();
+    const now = new Date();
+    document.getElementById('lastUpdated').textContent = `更新時間：${now.toLocaleTimeString()}`;
+  }
+
+  function getCellValue(cell) {
+    if (!cell) return '';
+    if (cell.f !== undefined && cell.f !== null) return String(cell.f).trim();
+    if (cell.v !== undefined && cell.v !== null) return String(cell.v).trim();
+    return '';
+  }
+
+  function populateDropdown() {
+    const select = document.getElementById('boardSelect');
+    const totalCountEl = document.getElementById('totalCount');
+    const previousIndex = select.value;
+
+    select.innerHTML = '';
+
+    if (boardsData.length === 0) {
+      select.innerHTML = '<option value="">無資料</option>';
+      totalCountEl.textContent = '總計片數：0 片';
+      document.getElementById('tableContainer').innerHTML = '<div class="loading">目前表單尚無測試紀錄。</div>';
+      return;
+    }
+
+    boardsData.forEach((board, idx) => {
+      const option = document.createElement('option');
+      option.value = idx;
+      // 顯示 1, 2, 3... 並附上該片板子的 SN 方便核對
+      option.textContent = `${idx + 1} (${board["寫SN"]})`;
+      select.appendChild(option);
+    });
+
+    totalCountEl.textContent = `總計片數：${boardsData.length} 片（1 ~ ${boardsData.length}）`;
+    select.disabled = false;
+
+    // 保留原本選擇的編號（若重新整理後仍存在）
+    if (previousIndex !== "" && Number(previousIndex) < boardsData.length) {
+      select.value = previousIndex;
+    } else {
+      select.value = 0;
+    }
+
+    select.onchange = () => renderTable(Number(select.value));
+    renderTable(Number(select.value));
+  }
+
+  function renderTable(index) {
+    const container = document.getElementById('tableContainer');
+    const data = boardsData[index];
+    if (!data) return;
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>測試項目</th>
+            <th>結果</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    LEFT_FIELDS.forEach(field => {
+      const rawVal = data[field] || '';
+      let formattedVal = '';
+
+      if (field === '寫SN' || field === 'Check MAC' || field === 'Check 主板序號') {
+        formattedVal = rawVal ? `<span class="mono">${escapeHtml(rawVal)}</span>` : `<span class="badge badge-empty">未填寫</span>`;
+      } else if (rawVal.toUpperCase() === 'PASS') {
+        formattedVal = `<span class="badge badge-pass">PASS</span>`;
+      } else if (rawVal === '') {
+        formattedVal = `<span class="badge badge-empty">-</span>`;
+      } else {
+        formattedVal = `<span class="badge badge-fail">${escapeHtml(rawVal)}</span>`;
+      }
+
+      html += `
+        <tr>
+          <td class="item-name">${escapeHtml(field)}</td>
+          <td class="item-value">${formattedVal}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+        </tbody>
+      </table>
+    `;
+
+    container.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // 頁面載入時自動執行
+  window.addEventListener('DOMContentLoaded', fetchSheetData);
+</script>
+
+</body>
+</html>
