@@ -263,8 +263,8 @@
 
     const script = document.createElement('script');
     script.id = 'gviz-script';
-    // 擴大讀取範圍到 A1:ZZ150，確保能涵蓋所有垂直區塊
-    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:handleSheetResponse&gid=${GID}&range=A1:ZZ150&_=${Date.now()}`;
+    // 擴大範圍讀取整張表單（涵蓋所有區塊）
+    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:handleSheetResponse&gid=${GID}&range=A1:ZZ200&_=${Date.now()}`;
     script.onerror = function() {
       container.innerHTML = `<div class="error">無法讀取試算表資料。請確認 Google 試算表已開啟「知道連結的任何人皆可檢視」權限。</div>`;
     };
@@ -283,7 +283,7 @@
     const rows = table.rows;
     boardsData = [];
 
-    // 1. 找出所有含有「寫SN」的列（支援多個垂直區塊，例如 row 3, 29, 55 等）
+    // 1. 尋找所有區塊的「寫SN」起點
     let snRows = [];
     for (let r = 0; r < rows.length; r++) {
       const cells = rows[r].c;
@@ -301,28 +301,32 @@
       return;
     }
 
-    // 2. 逐一走訪每一個區塊
+    // 2. 獨立解析每一個垂直區塊
     snRows.forEach(block => {
       const snRowIdx = block.rowIdx;
       const labelColIdx = block.colIdx;
       const snRowCells = rows[snRowIdx].c;
 
-      // 建立該區塊的項目名稱對照表 (項目名稱 -> 該區塊內的行索引)
+      // 建立此區塊專屬的欄位名稱對照表（動態掃描該區塊周圍的行，避免固定行數偏移）
       const rowMap = {};
-      // 往下最多檢查 25 行（涵蓋此區塊的各個測試項目）
-      for (let r = snRowIdx + 1; r < Math.min(snRowIdx + 30, rows.length); r++) {
+      for (let r = snRowIdx; r < Math.min(snRowIdx + 30, rows.length); r++) {
         const cells = rows[r].c;
         if (!cells || !cells[labelColIdx]) continue;
         const key = getCellValue(cells[labelColIdx]);
-        if (key) {
-          rowMap[key] = r;
-        }
+        // 標準化欄位名稱比對（去除空白與特殊符號差異）
+        const normalizedKey = key.replace(/\s+/g, '');
+        
+        LEFT_FIELDS.forEach(field => {
+          if (field.replace(/\s+/g, '') === normalizedKey) {
+            rowMap[field] = r;
+          }
+        });
       }
 
-      // 掃描該區塊右側的欄位（通常 C 到 L 或更多）
+      // 走訪該區塊右側的所有直欄（板子編號）
       for (let c = labelColIdx + 1; c < snRowCells.length; c++) {
         const snValue = getCellValue(snRowCells[c]);
-        if (!snValue) continue; // 若該格無 SN 則跳過
+        if (!snValue) continue; // 空欄跳過
 
         const record = {
           "寫SN": snValue
@@ -331,7 +335,7 @@
         LEFT_FIELDS.forEach(field => {
           if (field === "寫SN") return;
           const targetRowIdx = rowMap[field];
-          if (targetRowIdx !== undefined && rows[targetRowIdx].c && rows[targetRowIdx].c[c]) {
+          if (targetRowIdx !== undefined && rows[targetRowIdx] && rows[targetRowIdx].c && rows[targetRowIdx].c[c]) {
             record[field] = getCellValue(rows[targetRowIdx].c[c]);
           } else {
             record[field] = "";
@@ -441,7 +445,7 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-    }
+  }
 
   window.addEventListener('DOMContentLoaded', fetchSheetData);
 </script>
